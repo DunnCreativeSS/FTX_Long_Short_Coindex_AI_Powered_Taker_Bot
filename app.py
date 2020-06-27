@@ -67,10 +67,17 @@ class FTXTaker( object ):
         self.test = test
         self.lts            = []
         self.bal = None
+        self.tradedIds = []
+        self.dotrade = {}
         self.bal_init = None
+        self.buying = True
+        self.selling = True
         self.bal_btc = None
         self.bal_btc_init = None
         self.positions = {}
+        self.tf = '1hr'
+
+        self.genome = '6'
         self.margin = None
         self.skew_size = {}
         self.IM = 0
@@ -90,7 +97,7 @@ class FTXTaker( object ):
         for coin in bal2['info']['result']:
             newbal = newbal + coin['usdValue']
         self.bal = newbal
-
+        print(bal2)
         self.bal_btc = self.bal / self.get_spot()
         if self.bal_init == None:
             self.bal_init = self.bal
@@ -220,27 +227,46 @@ class FTXTaker( object ):
         print    (   '\nMean Loop Time: %s' % round( self.mean_looptime, 2 ))
             
         ###print( '' )
+    def get_minimums(self):
+        print('lala')
+
 
     def run_first(self):
-        
+        print(7)
         self.create_client()
+        print(8)
         self.get_futures()
         for pair in self.lts:
             self.positions[pair] = {
             'usdValue':         0,
             'sizeBtc':      0,
             'averagePrice': None,
-            'floatingPl': 0}   
-        r = Timer(3, self.post_info, ())
-        r.start() 
+            'floatingPl': 0} 
+        print(9)
+        self.get_minimums()  
+        #r = Timer(3, self.post_info, ())
+        #r.start() 
     def run (self):
+        print("1")
         self.run_first()
         t_loop = datetime.datetime.utcnow()
         while True:
+            print("2")
+
             self.check_balance()
+            print("3")
+            
+
             self.update_positions()
+            print("4")
+            
             self.output_status()
+            print("5")
+            
             self.checkTrades()
+            print("6")
+            
+
             print('sleeping...')
             sleep(1 * 60)
             t_now      = datetime.datetime.utcnow()
@@ -295,31 +321,45 @@ class FTXTaker( object ):
                 #self.ftx.createOrder(  lt, lorm, direction, qty)
                  
         else:
-        
-            r = requests.get("someurl:port/endpoint").json()
+            print("http://35.238.6.251:5000/signals/")
+            r = requests.get("http://35.238.6.251:5000/signals/" + self.tf + "/" + self.genome).json()
             for signal in r:
-                lt = signal['fut']
+                lt = signal['asset'] + "-PERP"
                 lorm = 'market'
-                direction = signal['direction']
+                direction = signal['signal']
+                print(direction)
+                if direction == 'short':
+                    direction = 'sell'
+                if direction == 'long':
+                    direction = 'buy'
                 gogo = True
-                prc = self.get_bbo(lt)
-
-                qty = self.bal * maxmargin * percentbalancefororders 
-                qty = qty / prc
-                if self.positions[lt]['usdValue'] is not None and self.margin is not None:
-                    if direction == 'buy' and self.positions[lt]['usdValue'] > 0 and self.margin > maxmargin:
-                        gogo = False
-                    if  direction == 'sell' and self.positions[lt]['usdValue'] < 0 and self.margin > maxmargin:
-                        gogo = False
-                if gogo == True:
-                    self.ftx.createOrder(  lt, lorm, direction, qty)
+                prc = self.get_bbo(lt)['bid']
+                print(signal['time_stamp'])
+                dt = datetime.datetime.strptime((signal['time_stamp'][5:][:-4]), "%d %b %Y %H:%M:%S")#26 Jun 2020 15:00:00 GMT
+                if dt > self.start_time and signal['time_stamp'] not in self.tradedIds:
+                    self.tradedIds.append(signal['time_stamp'])
+                    print(signal['time_stamp'])
+                    qty = self.bal * maxmargin * percentbalancefororders 
+                    qty = qty / prc
+                    if self.positions[lt]['usdValue'] is not None and self.margin is not None:
+                        if direction == 'buy' and self.positions[lt]['usdValue'] > 0 and self.margin > maxmargin:
+                            gogo = False
+                        if  direction == 'sell' and self.positions[lt]['usdValue'] < 0 and self.margin > maxmargin:
+                            gogo = False
+                    if gogo == True:
+                        self.ftx.createOrder(  lt, lorm, direction, qty)
                  
     def get_futures(self):
         ftxmarkets = self.ftx.fetchMarkets()
+
         expis = []
         alllts = []
         for market in ftxmarkets:
-            if '/' in market['symbol']:
+            if 'PERP' in market['symbol']:
+                #print(market)\
+
+                #ords        = self.ftx.fetchOpenOrders( )
+                #print(ords)
                 self.lts.append(market['symbol'])
     def restart( self ):        
         try:
